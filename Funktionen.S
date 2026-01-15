@@ -17,84 +17,81 @@
 	.type	Operationen, %function 
 Operationen: 
 
-	@ r0 = &PDSR
-	@ r1 = &CODR
-	// bis hier ist Aufgabe 1. Man muss mit dem APCS die Registern fuer die Parameterns richtig waehlen 
-	
-	LDR	r2, [r0]		// r2 = *PDSR
-	AND 	r3, r2, #0x38		// so only bit 3..5 are visible
-	LSR 	r3, r3, #3		// bit0=SW1, bit1=SW2, bit2=SW3
-	// Aufgabe 2, Wert von PDSR in r2 einsetzen. Adresse von PDSR wird in r0 uebergegeben
-	
-	MOV	r2, #0x01
-	LSL	r2, r2, #8		// bit8 = 1
-	ORR     r2, r2, #0x0400 	// DS3 (bit10)
-    	ORR     r2, r2, #0x8000 	// DS8 (bit15)
-	STR	r2, [r1]		// write to CODR, LED ON (low active) -> turning on DS1,3,8
-	// Aufgabe 3
-	
-	
-	LDR 	r2, [r0]		// r2 = *PDSR
-	LSR 	r2, r2, #3		// shift 3 to right, just to make it more visible
-	AND 	r2, r2, #0x03		// mask other bits to make bit 0 and 1 more visible
-	
-	AND 	r3, r2, #1      	// r3 = SW1
-    	LSR 	r4, r2, #1
-    	AND 	r4, r4, #1		// r4 = SW2
-	
-	MOV 	r5, #0			// LED Mask, just zeros. To save the bits from the operations and pass it to the LED
-	
-//AND
-	AND	r6, r3, r4		// DS1
-	TST	r6, #1			// check the result from the operation
-	ORRNE	r5, r5, #0x100		// write the 1 to bit8, if the result is 1
+// CODR : Clear Output Data Register	// clear the output if the bit is 1, the output is forced to be 0
+// SODR : Set Output Data Register	// set the output if the bit is 1, the output is forced to be 1
 
-//OR	
-	ORR 	r6, r3, r4		// DS2
-    	TST 	r6, #1
-    	ORRNE 	r5, r5, #0x0200		// bit9
+// ACHTUNG ! : alle Taste und LEDs sind low active!
 
-//XOR	
-	EOR 	r6, r3, r4		// DS3
-    	TST 	r6, #1
-    	ORRNE 	r5, r5, #0x0400		// bit10
+// Aufgabe 1 : falls in Funktion steht nichts dann kann func Operationen von c nicht aufgerufen werden (crash) // mind. bx lr
 
-//ADDITION	
-	ADD 	r6, r3, r4		// DS4,5
-	TST 	r6, #1
-	ORRNE 	r5, r5, #0x0800		// bit11
-	TST 	r6, #2
-	ORRNE 	r5, r5, #0x1000		// bit12
-	
-//SUBSTRACTION
-	SUB	r6, r3, r4		// DS6,7
-	AND	r6, r6, #3		// modulo 4
-	TST 	r6, #1
-	ORRNE	r5, r5, #0x2000		// bit13
-	TST 	r6, #2
-	ORRNE	r5, r5, #0x4000		// bit14
-	
-	
-	MOV 	r6, #0xFF
-    	LSL 	r6, r6, #8
-    	STR 	r6, [r1, #-4]   	// all LEDs off
-	
-	STR 	r5, [r1]		// CODR -> LEDs on
-	
-	// Aufgabe 4			// 
-	
-	
-	// return value depends on SW3 (bit5)
-    	LDR     r2, [r0]          	// read PDSR again (or reuse earlier value)
-    	TST     r2, #(1<<5)      	// SW3?
+	PUSH	{r4-r6, lr}		// secure not scratch register
 
-	// return value
-    	MOVEQ   r0, #1            	// pressed (active-low) -> TRUE
-    	MOVNE   r0, #0            	// not pressed -> FALSE
-	// Aufgabe 5
+// Aufgabe 2
+	LDR	r2, [r0]		// r2 = value from address r0 (PDSR)
+	MVN	r2, r2			// the buttons and LEDs are low active
 	
-// Beenden 
-	BX 	lr // return to main program
+// Aufgabe 3
+// just skip this, this code is not the part of the task
+//	STR	r0, [r1]		// pass it as the value from Address r1 (CODR), to turn all LEDs on
+	
+// pass SW1 from bit3 of PDSR in r3
+	AND	r3, r2, #(1 << 3) 	// 0001 shifted 3 to left // bit3 and 1
+	LSR	r3, r3, #3		// shift 3 to right
+	
+// pass SW2 from bit4 of PDSR in r4
+	AND	r4, r2, #(1 << 4)
+	LSR	r4, r4, #4
+
+// register to save the result of each operations
+	MOV	r5, #0
+	
+//AND @DS1 bit8
+	AND	r6, r3, r4
+	LSL	r6, r6, #8
+	ORR	r5, r5, r6
+	
+//OR @DS2 bit9
+	ORR	r6, r3, r4
+	LSL	r6, r6, #9
+	ORR	r5, r5, r6
+	
+//EOR @DS3 bit10
+	EOR	r6, r3, r4
+	LSL	r6, r6, #10
+	ORR	r5, r5, r6
+	
+//ADDITION @DS4 bit11, @DS5 bit12
+	ADD	r6, r3, r4
+	LSL	r6, r6, #11
+	ORR	r5, r5, r6
+	
+//SUBSTRAKTION @DS6 bit13, @DS7 bit14
+	SUB	r6, r3, r4
+	AND	r6, r6, #3 		// get bit0 and 1, mask the rest
+	LSL	R6, R6, #13
+	ORR	r5, r5, r6
+	
+// turn on the LEDs (Aufgabe 3)
+	MOV	r6, #0xFF00		// einsen von bit 8 bis 15
+	STR	r6, [r1, #-4]		// einfach zur Sicherheit falls return 0 (siehe c source), SODR = CODR - 4, alle LEDs aus
+	 
+	STR	r5, [r1]		// pass the value of the result to CODR
+	
+// return value
+// depends on SW3 (bit5 of PDSR)
+	TST	r2, #(1 << 5)
+	
+	MOVEQ	r0, #0			// return true if 1
+	MOVNE	r0, #1			// else false
+					// why inverted? => low active
+
+
+//Beenden
+
+	POP {r4-r6, pc}			// this command is already a return, so no need to do bx lr
+	
+//	BX lr				// makes no sense // this code won't be reached after pop
+
 
  
 .Lfe1: 
